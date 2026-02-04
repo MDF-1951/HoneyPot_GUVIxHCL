@@ -1,0 +1,10 @@
+venv/
+__pycache__/
+.env
+test_output.log
+test_callback.py
+guvi_callback_preview.log
+agent_trace.log
+check_models.py
+diagnose_api.py
+
