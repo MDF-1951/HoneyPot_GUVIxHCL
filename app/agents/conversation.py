@@ -7,7 +7,7 @@ logger = logging.getLogger(__name__)
 
 # Initialize Gemini for Conversation
 llm = ChatGoogleGenerativeAI(
-    model="gemini-2.5-flash",
+    model="gemini-2.5-flash-lite",
     temperature=0.65, 
     google_api_key=settings.GOOGLE_API_KEY
 )
