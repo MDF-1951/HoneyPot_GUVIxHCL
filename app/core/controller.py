@@ -12,6 +12,7 @@ from app.agents.scammer_profiler import profile_scammer
 from app.agents.intelligence import extract_intelligence
 from app.agents.strategy import decide_strategy
 from app.agents.conversation import generate_reply
+from app.agents.exit_engine import evaluate as evaluate_exit, ExitPhase
 from app.utils.trace_logger import log_trace
 
 logger = logging.getLogger(__name__)
@@ -140,9 +141,24 @@ def _orchestrate_agents(session: SessionData, request: HoneypotRequest) -> str:
         )
         log_trace("AGENT_5_CONVERSATION_OUTPUT", {"reply": reply})
         
+        # AGENT 6: Exit Engine (Signal-Based Decision)
+        exit_decision = evaluate_exit(session, intelligence, strategy)
+        log_trace("AGENT_6_EXIT_ENGINE_OUTPUT", exit_decision.model_dump())
+        
+        if exit_decision.should_exit:
+            if exit_decision.exit_phase == ExitPhase.SOFT_EXIT:
+                reply = _get_soft_exit_response()
+            elif exit_decision.exit_phase == ExitPhase.CONTROLLED_BREAKDOWN:
+                reply = _get_breakdown_response()
+            elif exit_decision.exit_phase == ExitPhase.TERMINATE:
+                session.state = SessionState.REPORTED
+                session.reported = True
+                _trigger_guvi_callback(session)
+                return "Connecting to secure server... Please wait." # Final terminal message
+
         # Update State Machine
         old_state = session.state.value
-        _update_state(session, scam_result, strategy)
+        _update_state(session, scam_result, strategy, exit_decision)
         log_trace("STATE_TRANSITION", {"from": old_state, "to": session.state.value})
         
         # Add to history
@@ -162,7 +178,7 @@ def _orchestrate_agents(session: SessionData, request: HoneypotRequest) -> str:
         logger.error(f"Agent Orchestration Error: {e}", exc_info=True)
         return "Sorry, could you repeat that?"
 
-def _update_state(session: SessionData, scam_result: Dict, strategy: Dict):
+def _update_state(session: SessionData, scam_result: Dict, strategy: Dict, exit_decision: Any = None):
     if session.state == SessionState.INIT and scam_result["isScam"]:
         session.state = SessionState.SCAM_CONFIRMED
     elif session.state == SessionState.SCAM_CONFIRMED:
@@ -170,9 +186,32 @@ def _update_state(session: SessionData, scam_result: Dict, strategy: Dict):
     elif session.state == SessionState.ENGAGING and "extract" in strategy["nextGoal"]:
         session.state = SessionState.EXTRACTING
     
-    if strategy["nextGoal"] == "exit_and_report":
+    # Check if exit engine or strategy wants to end it
+    if (exit_decision and exit_decision.should_exit) or strategy["nextGoal"] == "exit_and_report":
         session.state = SessionState.REPORTED
         session.reported = True
+
+def _get_soft_exit_response() -> str:
+    import random
+    responses = [
+        "wait someone is at the door ill check",
+        "sorry phone is dying one sec",
+        "i think my net is not working i will try again later",
+        "i need to go get my card from upstairs daddy is calling",
+        "wait i am getting another call from bank"
+    ]
+    return random.choice(responses)
+
+def _get_breakdown_response() -> str:
+    import random
+    responses = [
+        "im so scared please dont block my money i dont know what to do",
+        "i am crying now why are you doing this to me i just want help",
+        "please please dont tell police i will try but everything is failing",
+        "i think i did something wrong now my phone is shaking im so worried",
+        "pls stop i will call my brother he knows this better im scared"
+    ]
+    return random.choice(responses)
 
 def _trigger_guvi_callback(session: SessionData):
     from app.services.guvi_callback import send_final_result
