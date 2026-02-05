@@ -11,16 +11,26 @@ from app.models.session import SessionData, SessionState
 logger = logging.getLogger(__name__)
 
 # Initialize Redis client
+redis_client = None
+
 try:
-    redis_client = redis.from_url(
-        settings.REDIS_URL,
-        decode_responses=True,
-        socket_connect_timeout=2,
-        socket_timeout=2
-    )
-    # Test connection
-    redis_client.ping()
-    logger.info("Redis connection established")
+    if settings.UPSTASH_REDIS_REST_URL and settings.UPSTASH_REDIS_REST_TOKEN:
+        from upstash_redis import Redis
+        redis_client = Redis(
+            url=settings.UPSTASH_REDIS_REST_URL,
+            token=settings.UPSTASH_REDIS_REST_TOKEN
+        )
+        logger.info("Upstash Redis connection established")
+    else:
+        redis_client = redis.from_url(
+            settings.REDIS_URL,
+            decode_responses=True,
+            socket_connect_timeout=2,
+            socket_timeout=2
+        )
+        # Test connection
+        redis_client.ping()
+        logger.info("Standard Redis connection established")
 except Exception as e:
     logger.warning(f"Redis connection failed: {e}. Using in-memory fallback.")
     redis_client = None
@@ -51,7 +61,10 @@ def get_session(session_id: str) -> SessionData:
             data = redis_client.get(key)
             
             if data:
-                session_dict = json.loads(data)
+                if isinstance(data, str):
+                    session_dict = json.loads(data)
+                else:
+                    session_dict = data
                 return SessionData(**session_dict)
         else:
             # Fallback to in-memory store

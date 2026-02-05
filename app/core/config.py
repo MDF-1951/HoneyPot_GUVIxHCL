@@ -6,6 +6,8 @@ class Settings(BaseSettings):
     
     # Redis Configuration
     REDIS_URL: str = "redis://localhost:6379"
+    UPSTASH_REDIS_REST_URL: str = ""
+    UPSTASH_REDIS_REST_TOKEN: str = ""
     SESSION_TTL: int = 3600  # 1 hour session timeout
     
     # GUVI Configuration
