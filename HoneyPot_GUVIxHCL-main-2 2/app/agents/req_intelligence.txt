@@ -1,3 +1,0 @@
-langchain-google-genai
-pydantic
-python-dotenv
